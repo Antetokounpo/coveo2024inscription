@@ -50,25 +50,50 @@ class Bot:
 
         return shooting_angle+angle_with_x_axis
 
+    def distance_from_cannon(self, cannon: Vector, meteor: Vector):
+        return np.linalg.norm([meteor.x - cannon.x, meteor.y - cannon.y])
+
     def get_next_move(self, game_message: GameMessage):
-        meteors = game_message.meteors
-
-        next_meteor = 0
-        meteors.sort(key=lambda m: m.meteorType, reverse=True)
-
-        cannon_position = Vector(game_message.cannon.position.x, -game_message.cannon.position.y)
-        rocket_speed = game_message.constants.rockets.speed
-        meteor_position = Vector(meteors[next_meteor].position.x, -meteors[next_meteor].position.y)
-        meteor_velocity = Vector(meteors[next_meteor].velocity.x, -meteors[next_meteor].velocity.y)
-
-        shooting_angle = -self.get_shooting_angle(cannon_position, rocket_speed, meteor_position, meteor_velocity) 
-        rotation_angle = degrees(shooting_angle)-game_message.cannon.orientation
 
         print(game_message.tick, file=fileout)
         print(game_message.meteors, file=fileout)
         print(game_message.rockets, file=fileout)
-        print(meteor_velocity, file=fileout)
+        print(game_message.score, file=fileout)
         print("", file=fileout)
+
+        if game_message.cannon.cooldown != 0:
+            return []
+
+        meteors = [m for m in game_message.meteors if m.id not in self.shooted]
+
+        if not meteors:
+            return []
+
+        next_meteor = 0
+        meteors.sort(key=lambda m: self.distance_from_cannon(game_message.cannon.position, m.position))
+
+        meteors_small = [m for m in meteors if m.meteorType == MeteorType.Small]
+        meteors_medium = [m for m in meteors if m.meteorType == MeteorType.Medium]
+        meteors_large = [m for m in meteors if m.meteorType == MeteorType.Large]
+
+        meteors = meteors_small + meteors_medium + meteors_large
+
+        cannon_position = Vector(game_message.cannon.position.x, -game_message.cannon.position.y)
+        rocket_speed = game_message.constants.rockets.speed
+
+        shooting_angle = np.pi
+        while abs(shooting_angle) > np.pi/2:
+            meteor_position = Vector(meteors[next_meteor].position.x, -meteors[next_meteor].position.y)
+            meteor_velocity = Vector(meteors[next_meteor].velocity.x, -meteors[next_meteor].velocity.y)
+ 
+            shooting_angle = -self.get_shooting_angle(cannon_position, rocket_speed, meteor_position, meteor_velocity) 
+            rotation_angle = degrees(shooting_angle)-game_message.cannon.orientation
+            next_meteor += 1
+            if next_meteor == len(meteors):
+                return []
+
+
+        self.shooted.append(meteors[next_meteor-1].id)
 
         return [
             RotateAction(angle=rotation_angle),
